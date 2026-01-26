@@ -2,7 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEmail, IsPhoneNumber, IsOptional } from 'class-validator';
 import { TrimDto } from 'src/shared/decorators/trim-dto.decorator';
 
-export class UpdateCompanyDto {
+export class UpdateProviderCompanyDto {
   @ApiPropertyOptional({
     description: 'Nome da empresa',
     example: 'Empresa XYZ',
@@ -46,7 +46,7 @@ export class UpdateCompanyDto {
   maxClients?: number;
 }
 
-export class UpdateCompanySwaggerDto extends UpdateCompanyDto {
+export class UpdateProviderCompanySwaggerDto extends UpdateProviderCompanyDto {
   @ApiPropertyOptional({
     description: 'Imagem da empresa',
     type: 'string',

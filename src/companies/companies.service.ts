@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { CreateProviderCompanyDto } from './dto/create-provider-company.dto';
-import { UpdateCompanyDto } from './dto/update-company.dto';
+import { UpdateProviderCompanyDto } from './dto/update-provider-company.dto';
 import { CompanyEntity } from './entities/company.entity';
 import { DatabaseEnum } from 'src/shared/enum/database.enum';
 import { Repository } from 'typeorm';
@@ -9,6 +9,9 @@ import { randomUUID } from 'crypto';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { ProviderCompanyDto } from './dto/company-provider.dto';
+import { ClientCompanyDto } from './dto/company-client.dto';
+import { CreateClientCompanyDto } from './dto/create-client-company.dto';
+import { UpdateClientCompanyDto } from './dto/update-client-company.dto';
 
 @Injectable()
 export class CompaniesService {
@@ -26,12 +29,27 @@ export class CompaniesService {
     }
   }
 
-  private async emailConflict(email: string): Promise<void> {
-    const hasEmail = await this.companyEntity.findOne({
-      where: {
-        email,
-      },
-    });
+  private async emailConflict(
+    email: string,
+    isClient: boolean,
+    providerId?: string,
+  ): Promise<void> {
+    const hasEmail = !providerId
+      ? await this.companyEntity.findOne({
+          where: {
+            email,
+            isClient,
+          },
+        })
+      : await this.companyEntity.findOne({
+          where: {
+            email,
+            isClient,
+            providerCompany: {
+              id: providerId,
+            },
+          },
+        });
 
     if (hasEmail) {
       throw new BadRequestException('Email já cadastrado');
@@ -84,7 +102,7 @@ export class CompaniesService {
     createCompanyDto: CreateProviderCompanyDto,
     image: Express.Multer.File,
   ): Promise<ProviderCompanyDto> {
-    await this.emailConflict(createCompanyDto.email);
+    await this.emailConflict(createCompanyDto.email, false);
     await this.publicPhoneConflict(createCompanyDto.publicPhone);
 
     const fileName = this.saveImage(image);
@@ -107,6 +125,44 @@ export class CompaniesService {
     };
   }
 
+  async createClientCompany(
+    createCompanyDto: CreateClientCompanyDto,
+    providerId: string,
+  ): Promise<ClientCompanyDto> {
+    await this.emailConflict(createCompanyDto.email, true, providerId);
+
+    const providerCompany = await this.companyEntity.findOne({
+      where: {
+        id: providerId,
+        isClient: false,
+      },
+    });
+
+    if (!providerCompany) {
+      throw new BadRequestException('Provedor não encontrado');
+    }
+
+    const companyCreate = {
+      name: createCompanyDto.name,
+      email: createCompanyDto.email,
+      maxUsers: createCompanyDto.maxUsers,
+      isClient: true,
+      providerCompany,
+    };
+
+    const company = this.companyEntity.create(companyCreate);
+
+    await this.companyEntity.save(company);
+
+    return {
+      id: company.id,
+      name: company.name,
+      email: company.email,
+      maxUsers: company.maxUsers,
+      providerId: company?.providerCompany?.id ?? '',
+    };
+  }
+
   async findAllProviderCompany(): Promise<ProviderCompanyDto[]> {
     const companies = await this.companyEntity.find({
       where: {
@@ -122,6 +178,25 @@ export class CompaniesService {
       maxUsers: company.maxUsers,
       maxClients: company.maxClients ?? 0,
       image: company.imageName ?? '',
+    }));
+  }
+
+  async findAllClientCompany(providerId: string): Promise<ClientCompanyDto[]> {
+    const companies = await this.companyEntity.find({
+      where: {
+        isClient: true,
+        providerCompany: {
+          id: providerId,
+        },
+      },
+    });
+
+    return companies.map((company) => ({
+      id: company.id,
+      name: company.name,
+      email: company.email,
+      maxUsers: company.maxUsers,
+      providerId: company?.providerCompany?.id ?? '',
     }));
   }
 
@@ -148,9 +223,36 @@ export class CompaniesService {
     };
   }
 
+  async findOneClientCompany(
+    id: string,
+    providerId: string,
+  ): Promise<ClientCompanyDto> {
+    const company = await this.companyEntity.findOne({
+      where: {
+        id,
+        isClient: true,
+        providerCompany: {
+          id: providerId,
+        },
+      },
+    });
+
+    if (!company) {
+      throw new BadRequestException('Empresa não encontrada');
+    }
+
+    return {
+      id: company.id,
+      name: company.name,
+      email: company.email,
+      maxUsers: company.maxUsers,
+      providerId: company?.providerCompany?.id ?? '',
+    };
+  }
+
   async updateProviderCompany(
     id: string,
-    updateCompanyDto: UpdateCompanyDto,
+    updateCompanyDto: UpdateProviderCompanyDto,
     image?: Express.Multer.File,
   ): Promise<ProviderCompanyDto> {
     const company = await this.companyEntity.findOne({
@@ -168,12 +270,15 @@ export class CompaniesService {
       company.name = updateCompanyDto.name;
     }
 
-    if (updateCompanyDto.email) {
-      await this.emailConflict(updateCompanyDto.email);
+    if (updateCompanyDto.email && updateCompanyDto.email !== company.email) {
+      await this.emailConflict(updateCompanyDto.email, false);
       company.email = updateCompanyDto.email;
     }
 
-    if (updateCompanyDto.publicPhone) {
+    if (
+      updateCompanyDto.publicPhone &&
+      updateCompanyDto.publicPhone !== company.publicPhone
+    ) {
       await this.publicPhoneConflict(updateCompanyDto.publicPhone);
       company.publicPhone = updateCompanyDto.publicPhone;
     }
@@ -212,6 +317,67 @@ export class CompaniesService {
     };
   }
 
+  async updateClientCompany(
+    id: string,
+    providerId: string,
+    updateCompanyDto: UpdateClientCompanyDto,
+  ): Promise<ClientCompanyDto> {
+    const providerCompany = await this.companyEntity.findOne({
+      where: {
+        id: providerId,
+        isClient: false,
+      },
+    });
+
+    if (!providerCompany) {
+      throw new BadRequestException('Empresa não encontrada');
+    }
+
+    const clientCompany = await this.companyEntity.findOne({
+      where: {
+        id,
+        isClient: true,
+        providerCompany: {
+          id: providerId,
+        },
+      },
+    });
+
+    if (!clientCompany) {
+      throw new BadRequestException('Empresa não encontrada');
+    }
+
+    if (updateCompanyDto.name) {
+      clientCompany.name = updateCompanyDto.name;
+    }
+
+    if (
+      updateCompanyDto.email &&
+      updateCompanyDto.email !== clientCompany.email
+    ) {
+      await this.emailConflict(
+        updateCompanyDto.email,
+        true,
+        providerCompany.id,
+      );
+      clientCompany.email = updateCompanyDto.email;
+    }
+
+    if (updateCompanyDto.maxUsers) {
+      clientCompany.maxUsers = updateCompanyDto.maxUsers;
+    }
+
+    const companyUpdated = await this.companyEntity.save(clientCompany);
+
+    return {
+      id: companyUpdated.id,
+      name: companyUpdated.name,
+      email: companyUpdated.email,
+      maxUsers: companyUpdated.maxUsers,
+      providerId: companyUpdated?.providerCompany?.id ?? '',
+    };
+  }
+
   async removeProviderCompany(id: string): Promise<void> {
     const company = await this.companyEntity.findOne({
       where: {
@@ -230,6 +396,35 @@ export class CompaniesService {
       if (fs.existsSync(oldImagePath)) {
         fs.unlinkSync(oldImagePath);
       }
+    }
+
+    await this.companyEntity.softDelete(id);
+  }
+
+  async removeClientCompany(id: string, providerId: string): Promise<void> {
+    const providerCompany = await this.companyEntity.findOne({
+      where: {
+        id: providerId,
+        isClient: true,
+      },
+    });
+
+    if (!providerCompany) {
+      throw new BadRequestException('Empresa não encontrada');
+    }
+
+    const clientCompany = await this.companyEntity.findOne({
+      where: {
+        id,
+        isClient: true,
+        providerCompany: {
+          id: providerId,
+        },
+      },
+    });
+
+    if (!clientCompany) {
+      throw new BadRequestException('Empresa não encontrada');
     }
 
     await this.companyEntity.softDelete(id);
