@@ -1,21 +1,17 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import {
-  CreateCompanyDto,
-  CreateCompanyResponseDto,
-} from './dto/create-company.dto';
+import { CreateProviderCompanyDto } from './dto/create-provider-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { CompanyEntity } from './entities/company.entity';
 import { DatabaseEnum } from 'src/shared/enum/database.enum';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'crypto';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import * as bcrypt from 'bcrypt';
-import { randomUUID } from 'node:crypto';
-import { NUMBER_OF_ROUNDS } from 'src/shared/consts/number-of-rounds';
+import { ProviderCompanyDto } from './dto/company-provider.dto';
 
 @Injectable()
-export class CompanyService {
+export class CompaniesService {
   private readonly MAX_SIZE_MB = 25;
   private readonly MAX_SIZE_BYTES = this.MAX_SIZE_MB * 1024 * 1024;
   private readonly IMAGES_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif'];
@@ -84,56 +80,56 @@ export class CompanyService {
     return fileName;
   }
 
-  async create(
-    createCompanyDto: CreateCompanyDto,
+  async createProviderCompany(
+    createCompanyDto: CreateProviderCompanyDto,
     image: Express.Multer.File,
-  ): Promise<CreateCompanyResponseDto> {
+  ): Promise<ProviderCompanyDto> {
     await this.emailConflict(createCompanyDto.email);
     await this.publicPhoneConflict(createCompanyDto.publicPhone);
 
     const fileName = this.saveImage(image);
 
-    const { password, ...companyData } = createCompanyDto;
-
-    const passwordHash = await bcrypt.hash(password, NUMBER_OF_ROUNDS);
-
-    const company = await this.companyEntity.save({
-      ...companyData,
-      password: passwordHash,
-      pathImage: fileName,
+    const company = this.companyEntity.create({
+      ...createCompanyDto,
+      imageName: fileName,
     });
+
+    await this.companyEntity.save(company);
 
     return {
       id: company.id,
-      ...companyData,
+      name: company.name,
+      email: company.email,
+      publicPhone: company.publicPhone ?? '',
+      maxUsers: company.maxUsers,
+      maxClients: company.maxClients ?? 0,
+      image: fileName,
     };
   }
 
-  async findAll(): Promise<CreateCompanyResponseDto[]> {
-    return await this.companyEntity.find({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        publicPhone: true,
-        maxUsers: true,
-        pathImage: true,
+  async findAllProviderCompany(): Promise<ProviderCompanyDto[]> {
+    const companies = await this.companyEntity.find({
+      where: {
+        isClient: false,
       },
     });
+
+    return companies.map((company) => ({
+      id: company.id,
+      name: company.name,
+      email: company.email,
+      publicPhone: company.publicPhone ?? '',
+      maxUsers: company.maxUsers,
+      maxClients: company.maxClients ?? 0,
+      image: company.imageName ?? '',
+    }));
   }
 
-  async findOne(id: string): Promise<CreateCompanyResponseDto> {
+  async findOneProviderCompany(id: string): Promise<ProviderCompanyDto> {
     const company = await this.companyEntity.findOne({
       where: {
         id,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        publicPhone: true,
-        maxUsers: true,
-        pathImage: true,
+        isClient: false,
       },
     });
 
@@ -141,17 +137,26 @@ export class CompanyService {
       throw new BadRequestException('Empresa não encontrada');
     }
 
-    return company;
+    return {
+      id: company.id,
+      name: company.name,
+      email: company.email,
+      publicPhone: company.publicPhone ?? '',
+      maxUsers: company.maxUsers,
+      maxClients: company.maxClients ?? 0,
+      image: company.imageName ?? '',
+    };
   }
 
-  async update(
+  async updateProviderCompany(
     id: string,
     updateCompanyDto: UpdateCompanyDto,
     image?: Express.Multer.File,
-  ) {
+  ): Promise<ProviderCompanyDto> {
     const company = await this.companyEntity.findOne({
       where: {
         id,
+        isClient: false,
       },
     });
 
@@ -159,27 +164,26 @@ export class CompanyService {
       throw new BadRequestException('Empresa não encontrada');
     }
 
-    if (updateCompanyDto.email && updateCompanyDto.email !== company.email) {
+    if (updateCompanyDto.name) {
+      company.name = updateCompanyDto.name;
+    }
+
+    if (updateCompanyDto.email) {
       await this.emailConflict(updateCompanyDto.email);
+      company.email = updateCompanyDto.email;
     }
 
-    if (
-      updateCompanyDto.publicPhone &&
-      updateCompanyDto.publicPhone !== company.publicPhone
-    ) {
+    if (updateCompanyDto.publicPhone) {
       await this.publicPhoneConflict(updateCompanyDto.publicPhone);
+      company.publicPhone = updateCompanyDto.publicPhone;
     }
-
-    const fieldsToUpdate: Partial<CompanyEntity> = {
-      ...updateCompanyDto,
-    };
 
     if (image) {
       const fileName = this.saveImage(image);
-      fieldsToUpdate.pathImage = fileName;
+      company.imageName = fileName;
 
-      if (company.pathImage) {
-        const oldImagePath = path.resolve(this.IMAGES_DIR, company.pathImage);
+      if (company.imageName) {
+        const oldImagePath = path.resolve(this.IMAGES_DIR, company.imageName);
 
         if (fs.existsSync(oldImagePath)) {
           fs.unlinkSync(oldImagePath);
@@ -187,13 +191,46 @@ export class CompanyService {
       }
     }
 
-    await this.companyEntity.update(id, fieldsToUpdate);
+    if (updateCompanyDto.maxUsers) {
+      company.maxUsers = updateCompanyDto.maxUsers;
+    }
 
-    return await this.findOne(id);
+    if (updateCompanyDto.maxClients) {
+      company.maxClients = updateCompanyDto.maxClients;
+    }
+
+    const companyUpdated = await this.companyEntity.save(company);
+
+    return {
+      id: companyUpdated.id,
+      name: companyUpdated.name,
+      email: companyUpdated.email,
+      publicPhone: companyUpdated.publicPhone ?? '',
+      maxUsers: companyUpdated.maxUsers,
+      maxClients: companyUpdated.maxClients ?? 0,
+      image: companyUpdated.imageName ?? '',
+    };
   }
 
-  async remove(id: string): Promise<void> {
-    await this.findOne(id);
+  async removeProviderCompany(id: string): Promise<void> {
+    const company = await this.companyEntity.findOne({
+      where: {
+        id,
+        isClient: false,
+      },
+    });
+
+    if (!company) {
+      throw new BadRequestException('Empresa não encontrada');
+    }
+
+    if (company.imageName) {
+      const oldImagePath = path.resolve(this.IMAGES_DIR, company.imageName);
+
+      if (fs.existsSync(oldImagePath)) {
+        fs.unlinkSync(oldImagePath);
+      }
+    }
 
     await this.companyEntity.softDelete(id);
   }

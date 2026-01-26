@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsPhoneNumber } from 'class-validator';
+import { IsEmail, IsPhoneNumber, IsOptional } from 'class-validator';
 import { TrimDto } from 'src/shared/decorators/trim-dto.decorator';
 
 export class UpdateCompanyDto {
@@ -7,7 +7,7 @@ export class UpdateCompanyDto {
     description: 'Nome da empresa',
     example: 'Empresa XYZ',
   })
-  @IsOptional()
+  @IsOptional({ message: 'Nome é obrigatório' })
   @TrimDto()
   name?: string;
 
@@ -15,18 +15,35 @@ export class UpdateCompanyDto {
     description: 'Email da empresa',
     example: 'empresa@xyz.com',
   })
-  @IsOptional()
   @TrimDto()
+  @IsOptional()
+  @IsEmail({}, { message: 'Email inválido' })
   email?: string;
 
   @ApiPropertyOptional({
-    description: 'Telefone público da empresa',
-    example: '1234567890',
+    description: 'Número de telefone público',
+    example: '+5511987654321',
   })
-  @IsOptional()
-  @IsPhoneNumber('BR', { message: 'Telefone público inválido' })
   @TrimDto()
+  @IsOptional()
+  @IsPhoneNumber('BR', { message: 'Número de telefone público inválido' })
   publicPhone?: string;
+
+  @ApiPropertyOptional({
+    description: 'Quantidade máxima de usuários',
+    example: 100,
+  })
+  @TrimDto()
+  @IsOptional()
+  maxUsers?: number;
+
+  @ApiPropertyOptional({
+    description: 'Quantidade máxima de clientes',
+    example: 100,
+  })
+  @TrimDto()
+  @IsOptional()
+  maxClients?: number;
 }
 
 export class UpdateCompanySwaggerDto extends UpdateCompanyDto {
@@ -35,6 +52,7 @@ export class UpdateCompanySwaggerDto extends UpdateCompanyDto {
     type: 'string',
     format: 'binary',
   })
+  @TrimDto()
   @IsOptional()
   image?: Express.Multer.File;
 }
