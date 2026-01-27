@@ -1,11 +1,10 @@
 import { ConfigService } from '@nestjs/config';
 import * as path from 'node:path';
-import { CompanyEntity } from 'src/companies/entities/company.entity';
 import { DatabaseEnum } from 'src/shared/enum/database.enum';
 import { DataSourceOptions, ObjectType } from 'typeorm';
 
 export const entityDictionary: Record<DatabaseEnum, ObjectType<unknown>[]> = {
-  [DatabaseEnum.POSTGRES]: [CompanyEntity],
+  [DatabaseEnum.POSTGRES]: [],
 };
 
 export const createDataSourceOptions = (
