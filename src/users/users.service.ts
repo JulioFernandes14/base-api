@@ -7,7 +7,6 @@ import { DatabaseEnum } from 'src/shared/enum/database.enum';
 import { Repository } from 'typeorm';
 import { UserDto } from './dto/user.dto';
 import * as bcrypt from 'bcrypt';
-import { randomBytes } from 'crypto';
 
 @Injectable()
 export class UsersService {
@@ -33,17 +32,12 @@ export class UsersService {
       throw new ConflictException('Email já cadastrado.');
     }
 
-    const numberOfRounds = randomBytes(8).toString('hex');
-    const passwordHashed = await bcrypt.hash(
-      createUserDto.password,
-      numberOfRounds,
-    );
-    createUserDto.password = `${numberOfRounds}.${passwordHashed}`;
+    const passwordHashed = await bcrypt.hash(createUserDto.password, 10);
 
     const user = await this.userEntity.save({
       name: createUserDto.name,
       email: createUserDto.email,
-      password: createUserDto.password,
+      passwordHash: passwordHashed,
     });
 
     return {

@@ -5,7 +5,7 @@ import {
   Get,
   Param,
   Post,
-  Put,
+  Patch,
 } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UsersService } from './users.service';
@@ -45,7 +45,7 @@ export class UsersController {
     };
   }
 
-  @Put(':id')
+  @Patch(':id')
   @ApiOperation({
     description: 'Atualiza os dados de um usuário',
   })

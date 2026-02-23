@@ -18,8 +18,8 @@ async function bootstrap() {
   );
 
   const config = new DocumentBuilder()
-    .setTitle('On Service API')
-    .setDescription('API do sistema On Service')
+    .setTitle('Base API')
+    .setDescription('API Base de sistemas')
     .setVersion('1.0')
     .addBearerAuth()
     .build();
@@ -27,6 +27,6 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
 
-  await app.listen(process.env.PORT ?? 4001);
+  await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();
