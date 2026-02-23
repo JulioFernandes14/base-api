@@ -3,17 +3,27 @@ import {
   Controller,
   Delete,
   Get,
-  Param,
   Post,
   Patch,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiBody, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserDto } from './dto/user.dto';
+import { JwtAuthGuard } from 'src/auth/guards/auth.guard';
+import { CurrentUser } from 'src/shared/decorators/current-user.decorator';
+import { UserEntity } from './entities/user.entity';
 
 @ApiTags('Usuários')
+@ApiBearerAuth()
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
@@ -28,44 +38,47 @@ export class UsersController {
     return this.usersService.create(createUserDto);
   }
 
-  @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @Get()
   @ApiOperation({
     description: 'Retorna os dados de um usuário pelo ID',
   })
   @ApiOkResponse({ type: UserDto })
-  async findOne(@Param('id') id: string): Promise<UserDto | null> {
-    const user = await this.usersService.findOne(id);
+  async findOne(@CurrentUser() user: UserEntity): Promise<UserDto | null> {
+    const res = await this.usersService.findOne(user.id);
 
-    if (!user) return null;
+    if (!res) return null;
 
     return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
+      id: res.id,
+      name: res.name,
+      email: res.email,
     };
   }
 
-  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  @Patch()
   @ApiOperation({
     description: 'Atualiza os dados de um usuário',
   })
   @ApiBody({ type: UpdateUserDto })
   @ApiOkResponse({ type: UserDto })
   async update(
-    @Param('id') id: string,
+    @CurrentUser() user: UserEntity,
     @Body() updateUserDto: UpdateUserDto,
   ): Promise<UserDto | null> {
-    return this.usersService.update(id, updateUserDto);
+    return this.usersService.update(user.id, updateUserDto);
   }
 
-  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  @Delete()
   @ApiOperation({
     description: 'Remove um usuário (soft delete)',
   })
   @ApiOkResponse({
     description: 'Usuário removido com sucesso',
   })
-  async remove(@Param('id') id: string): Promise<void> {
-    await this.usersService.remove(id);
+  async remove(@CurrentUser() user: UserEntity): Promise<void> {
+    await this.usersService.remove(user.id);
   }
 }
